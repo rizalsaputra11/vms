@@ -365,13 +365,12 @@ start_vm() {
             setup_vm_image
         fi
         
-        # Base QEMU command
+        # Base QEMU command without KVM and with NVIDIA CPU/GPU
         local qemu_cmd=(
             qemu-system-x86_64
-            -enable-kvm
             -m "$MEMORY"
             -smp "$CPUS"
-            -cpu host
+            -cpu EPYC-Milan,+aes,+avx2
             -drive "file=$IMG_FILE,format=qcow2,if=virtio"
             -drive "file=$SEED_FILE,format=raw,if=virtio"
             -boot order=c
@@ -389,9 +388,12 @@ start_vm() {
             done
         fi
 
-        # Add GUI or console mode
+        # Add GPU configuration for NVIDIA
         if [[ "$GUI_MODE" == true ]]; then
-            qemu_cmd+=(-vga virtio -display gtk,gl=on)
+            qemu_cmd+=(-vga std -display gtk)
+            # NVIDIA GPU passthrough (comment if not available)
+            # qemu_cmd+=(-device vfio-pci,host=01:00.0,multifunction=on)
+            # qemu_cmd+=(-device vfio-pci,host=01:00.1)
         else
             qemu_cmd+=(-nographic -serial mon:stdio)
         fi
@@ -403,7 +405,8 @@ start_vm() {
             -device virtio-rng-pci,rng=rng0
         )
 
-        print_status "INFO" "Starting QEMU..."
+        print_status "INFO" "Starting QEMU without KVM acceleration..."
+        print_status "INFO" "Using CPU: Nehalem (compatible with NVIDIA systems)"
         "${qemu_cmd[@]}"
         
         print_status "INFO" "VM $vm_name has been shut down"
@@ -860,12 +863,13 @@ check_dependencies
 VM_DIR="${VM_DIR:-$HOME/vms}"
 mkdir -p "$VM_DIR"
 
-# Supported OS list
+# Supported OS list - Updated Debian 13 URL to latest stable version
 declare -A OS_OPTIONS=(
     ["Ubuntu 22.04"]="ubuntu|jammy|https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img|ubuntu22|ubuntu|ubuntu"
     ["Ubuntu 24.04"]="ubuntu|noble|https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img|ubuntu24|ubuntu|ubuntu"
     ["Debian 11"]="debian|bullseye|https://cloud.debian.org/images/cloud/bullseye/latest/debian-11-generic-amd64.qcow2|debian11|debian|debian"
     ["Debian 12"]="debian|bookworm|https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2|debian12|debian|debian"
+    ["Debian 13"]="debian|trixie|https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2|debian13|debian|debian"
     ["Fedora 40"]="fedora|40|https://download.fedoraproject.org/pub/fedora/linux/releases/40/Cloud/x86_64/images/Fedora-Cloud-Base-40-1.14.x86_64.qcow2|fedora40|fedora|fedora"
     ["CentOS Stream 9"]="centos|stream9|https://cloud.centos.org/centos/9-stream/x86_64/images/CentOS-Stream-GenericCloud-9-latest.x86_64.qcow2|centos9|centos|centos"
     ["AlmaLinux 9"]="almalinux|9|https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2|almalinux9|alma|alma"
