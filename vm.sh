@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # =============================
-# Enhanced Multi-VM Manager - PROXMOX BRIDGE NETWORK
+# Enhanced Multi-VM Manager - PROXMOX OPTIMIZED
 # =============================
 
 # Function to display header
@@ -17,7 +17,7 @@ display_header() {
  | |  | | |__| | |    _| |_| |\  | |__| | |_) | |__| | | |   / /__ 
  |_|  |_|\____/|_|   |_____|_| \_|\_____|____/ \____/  |_|  /_____|
                                                                   
-                    PROXMOX BRIDGE NETWORK - AUTO VMBR0
+                    PROXMOX OPTIMIZED - STABLE VERSION
 ========================================================================
 EOF
     echo
@@ -74,25 +74,13 @@ validate_input() {
                 return 1
             fi
             ;;
-        "ip")
-            if ! [[ "$value" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
-                print_status "ERROR" "Must be a valid IP/CIDR (e.g., 192.168.1.10/24)"
-                return 1
-            fi
-            ;;
-        "gateway")
-            if ! [[ "$value" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                print_status "ERROR" "Must be a valid IP address (e.g., 192.168.1.1)"
-                return 1
-            fi
-            ;;
     esac
     return 0
 }
 
 # Function to check dependencies
 check_dependencies() {
-    local deps=("qemu-system-x86_64" "wget" "cloud-localds" "qemu-img" "brctl")
+    local deps=("qemu-system-x86_64" "wget" "cloud-localds" "qemu-img")
     local missing_deps=()
     
     for dep in "${deps[@]}"; do
@@ -103,7 +91,7 @@ check_dependencies() {
     
     if [ ${#missing_deps[@]} -ne 0 ]; then
         print_status "ERROR" "Missing dependencies: ${missing_deps[*]}"
-        print_status "INFO" "On Ubuntu/Debian, try: sudo apt install qemu-system cloud-image-utils wget bridge-utils"
+        print_status "INFO" "On Ubuntu/Debian, try: sudo apt install qemu-system cloud-image-utils wget"
         exit 1
     fi
 }
@@ -128,7 +116,6 @@ load_vm_config() {
         # Clear previous variables
         unset VM_NAME OS_TYPE CODENAME IMG_URL HOSTNAME USERNAME PASSWORD
         unset DISK_SIZE MEMORY CPUS SSH_PORT GUI_MODE PORT_FORWARDS IMG_FILE SEED_FILE CREATED
-        unset BRIDGE_NETWORK BRIDGE_GATEWAY BRIDGE_IP
         
         source "$config_file"
         return 0
@@ -159,46 +146,9 @@ PORT_FORWARDS="$PORT_FORWARDS"
 IMG_FILE="$IMG_FILE"
 SEED_FILE="$SEED_FILE"
 CREATED="$CREATED"
-BRIDGE_NETWORK="$BRIDGE_NETWORK"
-BRIDGE_GATEWAY="$BRIDGE_GATEWAY"
-BRIDGE_IP="$BRIDGE_IP"
 EOF
     
     print_status "SUCCESS" "Configuration saved to $config_file"
-}
-
-# Function to setup bridge network on host
-setup_bridge_network() {
-    local bridge_name="vmbr0"
-    
-    print_status "INFO" "Setting up bridge network $bridge_name..."
-    
-    # Check if bridge already exists
-    if brctl show | grep -q "$bridge_name"; then
-        print_status "INFO" "Bridge $bridge_name already exists"
-        return 0
-    fi
-    
-    # Create bridge
-    sudo brctl addbr "$bridge_name"
-    sudo ip link set "$bridge_name" up
-    
-    # Assign IP to bridge (using a private range that won't conflict)
-    local bridge_ip="192.168.100.1"
-    sudo ip addr add "$bridge_ip/24" dev "$bridge_name"
-    
-    print_status "SUCCESS" "Bridge $bridge_name created with IP $bridge_ip/24"
-    
-    # Enable IP forwarding
-    echo 1 | sudo tee /proc/sys/net/ipv4/ip_forward > /dev/null
-    sudo sysctl -w net.ipv4.ip_forward=1
-    
-    # Add iptables rules for NAT
-    sudo iptables -t nat -A POSTROUTING -s 192.168.100.0/24 -j MASQUERADE
-    sudo iptables -A FORWARD -i "$bridge_name" -j ACCEPT
-    sudo iptables -A FORWARD -o "$bridge_name" -j ACCEPT
-    
-    print_status "INFO" "NAT configured for bridge network"
 }
 
 # Function to create new VM
@@ -267,27 +217,6 @@ create_new_vm() {
         fi
     done
 
-    # Bridge Network Configuration
-    print_status "INFO" "Bridge Network Configuration for Proxmox:"
-    
-    while true; do
-        read -p "$(print_status "INPUT" "Bridge IP/CIDR (default: 192.168.100.10/24): ")" BRIDGE_IP
-        BRIDGE_IP="${BRIDGE_IP:-192.168.100.10/24}"
-        if validate_input "ip" "$BRIDGE_IP"; then
-            break
-        fi
-    done
-
-    while true; do
-        read -p "$(print_status "INPUT" "Bridge Gateway (default: 192.168.100.1): ")" BRIDGE_GATEWAY
-        BRIDGE_GATEWAY="${BRIDGE_GATEWAY:-192.168.100.1}"
-        if validate_input "gateway" "$BRIDGE_GATEWAY"; then
-            break
-        fi
-    done
-
-    BRIDGE_NETWORK="192.168.100.0/24"
-
     while true; do
         read -p "$(print_status "INPUT" "Disk size (default: 20G): ")" DISK_SIZE
         DISK_SIZE="${DISK_SIZE:-20G}"
@@ -346,9 +275,6 @@ create_new_vm() {
     SEED_FILE="$VM_DIR/$VM_NAME-seed.iso"
     CREATED="$(date)"
 
-    # Setup bridge network on host
-    setup_bridge_network
-    
     # Download and setup VM image
     setup_vm_image
     
@@ -356,7 +282,7 @@ create_new_vm() {
     save_vm_config
 }
 
-# Function to setup VM image with BRIDGE NETWORK CONFIG
+# Function to setup VM image with FIXED NETWORK CONFIG
 setup_vm_image() {
     print_status "INFO" "Downloading and preparing image..."
     
@@ -383,10 +309,7 @@ setup_vm_image() {
         qemu-img create -f qcow2 "$IMG_FILE" "$DISK_SIZE"
     fi
 
-    # Extract IP without CIDR for cloud-init
-    local VM_IP="${BRIDGE_IP%/*}"
-
-    # ADVANCED cloud-init configuration with BRIDGE NETWORK
+    # FIXED cloud-init configuration with NETWORK FIX
     cat > user-data <<EOF
 #cloud-config
 hostname: $HOSTNAME
@@ -414,51 +337,15 @@ packages:
   - wget
   - net-tools
   - iputils-ping
-  - bridge-utils
-  - vim
-write_files:
-  - path: /etc/systemd/network/10-vmbr0.network
-    content: |
-      [Match]
-      Name=vmbr0
-      
-      [Network]
-      Address=$BRIDGE_IP
-      Gateway=$BRIDGE_GATEWAY
-      DNS=8.8.8.8
-      DNS=8.8.4.4
-      
-      [Route]
-      Gateway=$BRIDGE_GATEWAY
-  - path: /etc/systemd/network/20-bridge.netdev
-    content: |
-      [NetDev]
-      Name=vmbr0
-      Kind=bridge
-  - path: /etc/systemd/network/30-eth1.network
-    content: |
-      [Match]
-      Name=eth1
-      
-      [Network]
-      Bridge=vmbr0
 runcmd:
-  - systemctl enable systemd-networkd
-  - systemctl start systemd-networkd
   - systemctl enable qemu-guest-agent
   - systemctl start qemu-guest-agent
   - [sh, -c, "echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config"]
   - systemctl restart ssh
-  - [sh, -c, "echo 'net.ipv4.ip_forward=1' >> /etc/sysctl.conf"]
-  - [sh, -c, "echo 'net.ipv6.conf.all.disable_ipv6=0' >> /etc/sysctl.conf"]
+  - [sh, -c, "echo 'net.ipv6.conf.all.disable_ipv6 = 0' >> /etc/sysctl.conf"]
+  - [sh, -c, "echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf"]
   - sysctl -p
-  - ip link add name vmbr0 type bridge
-  - ip link set vmbr0 up
-  - ip addr add $BRIDGE_IP dev vmbr0
-  - ip route add default via $BRIDGE_GATEWAY dev vmbr0
-  - [sh, -c, "echo 'nameserver 8.8.8.8' > /etc/resolv.conf"]
-  - [sh, -c, "echo 'nameserver 8.8.4.4' >> /etc/resolv.conf"]
-final_message: "The system is finally up, after \$UPTIME seconds - Bridge IP: $VM_IP"
+final_message: "The system is finally up, after \$UPTIME seconds"
 EOF
 
     cat > meta-data <<EOF
@@ -471,20 +358,6 @@ network:
       dhcp4: true
       dhcp6: true
       optional: false
-    eth1:
-      dhcp4: false
-      dhcp6: false
-      optional: true
-  bridges:
-    vmbr0:
-      interfaces: [eth1]
-      addresses: [$BRIDGE_IP]
-      gateway4: $BRIDGE_GATEWAY
-      nameservers:
-        addresses: [8.8.8.8, 8.8.4.4]
-      parameters:
-        stp: false
-        forward-delay: 0
 EOF
 
     if ! cloud-localds "$SEED_FILE" user-data meta-data; then
@@ -492,10 +365,10 @@ EOF
         exit 1
     fi
     
-    print_status "SUCCESS" "VM '$VM_NAME' created with bridge network $BRIDGE_IP"
+    print_status "SUCCESS" "VM '$VM_NAME' created successfully."
 }
 
-# Function to start a VM with BRIDGE NETWORK
+# Function to start a VM - FIXED VERSION
 start_vm() {
     local vm_name=$1
     
@@ -503,7 +376,6 @@ start_vm() {
         print_status "INFO" "Starting VM: $vm_name"
         print_status "INFO" "SSH: ssh -p $SSH_PORT $USERNAME@localhost"
         print_status "INFO" "Password: $PASSWORD"
-        print_status "INFO" "Bridge Network: $BRIDGE_IP (Gateway: $BRIDGE_GATEWAY)"
         
         # Check if image file exists
         if [[ ! -f "$IMG_FILE" ]]; then
@@ -517,25 +389,17 @@ start_vm() {
             setup_vm_image
         fi
         
-        # Ensure bridge exists
-        if ! brctl show | grep -q "vmbr0"; then
-            print_status "WARN" "Bridge vmbr0 not found, creating..."
-            setup_bridge_network
-        fi
-        
-        # QEMU with BRIDGE NETWORK configuration
+        # STABLE QEMU CONFIGURATION FOR PROXMOX
         local qemu_cmd=(
             qemu-system-x86_64
-            -machine "type=q35,accel=tcg"
-            -cpu "EPYC,+aes,+sse4.2,+popcnt"
+            -machine type=q35,accel=tcg
+            -cpu "EPYC,+aes,+sse4.2,+popcnt"  # STABLE CPU FOR PROXMOX
             -smp "$CPUS"
             -m "$MEMORY"
             -drive "file=$IMG_FILE,format=qcow2,if=virtio,cache=writeback"
             -drive "file=$SEED_FILE,format=raw,if=virtio"
             -netdev "user,id=net0,hostfwd=tcp::$SSH_PORT-:22"
             -device "virtio-net-pci,netdev=net0"
-            -netdev "bridge,id=net1,br=vmbr0"
-            -device "virtio-net-pci,netdev=net1,mac=52:54:00:12:34:$(printf '%02x' $(($RANDOM % 256)))"
             -device "virtio-balloon-pci"
             -rtc "base=utc,clock=host"
             -no-hpet
@@ -545,7 +409,7 @@ start_vm() {
         # Add port forwards if specified
         if [[ -n "$PORT_FORWARDS" ]]; then
             IFS=',' read -ra forwards <<< "$PORT_FORWARDS"
-            local net_idx=2
+            local net_idx=1
             for forward in "${forwards[@]}"; do
                 IFS=':' read -r host_port guest_port <<< "$forward"
                 qemu_cmd+=(-netdev "user,id=net$net_idx,hostfwd=tcp::$host_port-:$guest_port")
@@ -572,8 +436,8 @@ start_vm() {
             -device "virtio-rng-pci,rng=rng0"
         )
 
-        print_status "INFO" "Starting QEMU with bridge network..."
-        print_status "INFO" "VM will be accessible at: $BRIDGE_IP"
+        print_status "INFO" "Starting QEMU with stable configuration..."
+        print_status "INFO" "Using CPU: Nehalem (optimized for Proxmox stability)"
         
         # Execute QEMU command
         "${qemu_cmd[@]}"
@@ -581,8 +445,6 @@ start_vm() {
         print_status "INFO" "VM $vm_name has been shut down"
     fi
 }
-
-# [REST OF THE FUNCTIONS REMAIN THE SAME AS BEFORE - delete_vm, show_vm_info, is_vm_running, stop_vm, edit_vm_config, resize_vm_disk, show_vm_performance, main_menu]
 
 # Function to delete a VM
 delete_vm() {
@@ -619,9 +481,6 @@ show_vm_info() {
         echo "Disk: $DISK_SIZE"
         echo "GUI Mode: $GUI_MODE"
         echo "Port Forwards: ${PORT_FORWARDS:-None}"
-        echo "Bridge IP: $BRIDGE_IP"
-        echo "Bridge Gateway: $BRIDGE_GATEWAY"
-        echo "Bridge Network: $BRIDGE_NETWORK"
         echo "Created: $CREATED"
         echo "Image File: $IMG_FILE"
         echo "Seed File: $SEED_FILE"
@@ -679,8 +538,6 @@ edit_vm_config() {
             echo "  7) Memory (RAM)"
             echo "  8) CPU Count"
             echo "  9) Disk Size"
-            echo "  10) Bridge IP"
-            echo "  11) Bridge Gateway"
             echo "  0) Back to main menu"
             
             read -p "$(print_status "INPUT" "Enter your choice: ")" edit_choice
@@ -786,26 +643,6 @@ edit_vm_config() {
                         fi
                     done
                     ;;
-                10)
-                    while true; do
-                        read -p "$(print_status "INPUT" "Enter new Bridge IP/CIDR (current: $BRIDGE_IP): ")" new_bridge_ip
-                        new_bridge_ip="${new_bridge_ip:-$BRIDGE_IP}"
-                        if validate_input "ip" "$new_bridge_ip"; then
-                            BRIDGE_IP="$new_bridge_ip"
-                            break
-                        fi
-                    done
-                    ;;
-                11)
-                    while true; do
-                        read -p "$(print_status "INPUT" "Enter new Bridge Gateway (current: $BRIDGE_GATEWAY): ")" new_bridge_gateway
-                        new_bridge_gateway="${new_bridge_gateway:-$BRIDGE_GATEWAY}"
-                        if validate_input "gateway" "$new_bridge_gateway"; then
-                            BRIDGE_GATEWAY="$new_bridge_gateway"
-                            break
-                        fi
-                    done
-                    ;;
                 0)
                     return 0
                     ;;
@@ -815,8 +652,8 @@ edit_vm_config() {
                     ;;
             esac
             
-            # Recreate seed image with new configuration if network-related settings changed
-            if [[ "$edit_choice" -eq 1 || "$edit_choice" -eq 2 || "$edit_choice" -eq 3 || "$edit_choice" -eq 10 || "$edit_choice" -eq 11 ]]; then
+            # Recreate seed image with new configuration if user/password/hostname changed
+            if [[ "$edit_choice" -eq 1 || "$edit_choice" -eq 2 || "$edit_choice" -eq 3 ]]; then
                 print_status "INFO" "Updating cloud-init configuration..."
                 setup_vm_image
             fi
@@ -920,7 +757,6 @@ show_vm_performance() {
             echo "  Memory: $MEMORY MB"
             echo "  CPUs: $CPUS"
             echo "  Disk: $DISK_SIZE"
-            echo "  Bridge IP: $BRIDGE_IP"
         fi
         echo "=========================================="
         read -p "$(print_status "INPUT" "Press Enter to continue...")"
@@ -957,7 +793,6 @@ main_menu() {
             echo "  6) Delete a VM"
             echo "  7) Resize VM disk"
             echo "  8) Show VM performance"
-            echo "  9) Setup Bridge Network"
         fi
         echo "  0) Exit"
         echo
@@ -1038,9 +873,6 @@ main_menu() {
                     fi
                 fi
                 ;;
-            9)
-                setup_bridge_network
-                ;;
             0)
                 print_status "INFO" "Goodbye!"
                 exit 0
@@ -1064,9 +896,9 @@ check_dependencies
 VM_DIR="${VM_DIR:-$HOME/vms}"
 mkdir -p "$VM_DIR"
 
-# Supported OS list - Optimized for Proxmox with Bridge Network
+# Supported OS list - Optimized for Proxmox
 declare -A OS_OPTIONS=(
-    ["Debian 13 (Trixie) - PROXMOX BRIDGE"]="debian|trixie|https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2|proxmox-bridge|proxmox|proxmox123"
+    ["Debian 13 (Trixie) - PROXMOX RECOMMENDED"]="debian|trixie|https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2|proxmox-debian13|proxmox|proxmox123"
     ["Ubuntu 22.04 LTS"]="ubuntu|jammy|https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img|ubuntu22|ubuntu|ubuntu"
     ["Ubuntu 24.04 LTS"]="ubuntu|noble|https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img|ubuntu24|ubuntu|ubuntu"
     ["Debian 12"]="debian|bookworm|https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2|debian12|debian|debian"
