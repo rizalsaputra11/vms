@@ -490,11 +490,15 @@ show_vm_info() {
     fi
 }
 
-# Function to check if VM is running
+# Function to check if VM is running - FIXED VERSION
 is_vm_running() {
     local vm_name=$1
-    if pgrep -f "qemu-system-x86_64.*$IMG_FILE" >/dev/null; then
-        return 0
+    if load_vm_config "$vm_name" 2>/dev/null; then
+        if pgrep -f "qemu-system-x86_64.*$IMG_FILE" >/dev/null; then
+            return 0
+        else
+            return 1
+        fi
     else
         return 1
     fi
