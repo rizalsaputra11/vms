@@ -393,7 +393,7 @@ start_vm() {
         local qemu_cmd=(
             qemu-system-x86_64
             -machine type=q35,accel=tcg
-            -cpu "EPYC,+aes,+sse4.2,+popcnt"  # STABLE CPU FOR PROXMOX
+            -cpu host,migratable=no \  # STABLE CPU FOR PROXMOX
             -smp "$CPUS"
             -m "$MEMORY"
             -drive "file=$IMG_FILE,format=qcow2,if=virtio,cache=writeback"
@@ -404,8 +404,13 @@ start_vm() {
             -rtc "base=utc,clock=host"
             -no-hpet
             -global "kvm-pit.lost_tick_policy=discard"
-        )
-
+            -drive file=disk.img,if=virtio,cache=writeback \
+           -netdev user,id=net0 \
+           -device virtio-net-pci,netdev=net0 \
+           -usb -device usb-tablet
+           -cpu-pm=on \
+    
+      ) 
         # Add port forwards if specified
         if [[ -n "$PORT_FORWARDS" ]]; then
             IFS=',' read -ra forwards <<< "$PORT_FORWARDS"
