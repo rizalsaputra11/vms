@@ -370,11 +370,17 @@ start_vm() {
             qemu-system-x86_64
             -m "$MEMORY"
             -smp "$CPUS"
-            -cpu EPYC-Milan,+aes,+avx2
+            -cpu qemu64 \
+            -accel tcg \
+            -vga std \
+           -drive file=disk.img,if=ide \
+           -netdev user,id=net0 \
+           -device e1000,netdev=net0 \
+           -no-acpi \
+            -serial stdio
             -drive "file=$IMG_FILE,format=qcow2,if=virtio"
             -drive "file=$SEED_FILE,format=raw,if=virtio"
             -boot order=c
-            -device virtio-net-pci,netdev=n0
             -netdev "user,id=n0,hostfwd=tcp::$SSH_PORT-:22"
         )
 
