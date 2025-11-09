@@ -371,13 +371,8 @@ start_vm() {
             -m "$MEMORY"
             -smp "$CPUS"
             -cpu qemu64 \
-            -accel tcg \
-            -vga std \
-           -drive file=disk.img,if=ide \
-           -netdev user,id=net0 \
-           -device e1000,netdev=net0 \
-           -no-acpi \
-            -serial stdio
+            -accel tcg
+            -no-acpi \
             -drive "file=$IMG_FILE,format=qcow2,if=virtio"
             -drive "file=$SEED_FILE,format=raw,if=virtio"
             -boot order=c
