@@ -370,15 +370,23 @@ start_vm() {
             qemu-system-x86_64
             -m "$MEMORY"
             -smp "$CPUS"
-            -cpu EPYS \
-            -accel tcg
-            -machine type=pc \
-            -vga std \
+            -cpu EPYC-Milan,+aes,+avx2,+invtsc \
+            -accel tcg,tb-size=1024,thread=multi \
+            -smp 120 \
+            -m 94G \
+            -machine type=q35 \
+            -vga virtio \
+            -display sdl \
+            -netdev user,id=net0 \
+            -device virtio-net-pci,netdev=net0,mq=on,vectors=12 \
+            -usb -device usb-tablet \
+            -audiodev pa,id=audio0,server=unix:/run/user/1000/pulse/native \
+            -device AC97,audiodev=audio0 \
+            -no-hpet \
+            -rtc base=utc,clock=host
             -drive "file=$IMG_FILE,format=qcow2,if=virtio"
             -drive "file=$SEED_FILE,format=raw,if=virtio"
             -netdev "user,id=n0,hostfwd=tcp::$SSH_PORT-:22"
-            -no-acpi \
-            -no-hpet \
             
         )
 
