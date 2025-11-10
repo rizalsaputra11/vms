@@ -393,8 +393,7 @@ start_vm() {
         local qemu_cmd=(
             qemu-system-x86_64
             -machine type=q35,accel=tcg
-            -cpu host,migratable=no,\
-+avx2,+avx,+aes,+sse4.2,+sse4a,+movbe,+xsave,+xsaveopt,\
+            -cpu EPYC,+avx2,+avx,+aes,+sse4.2,+sse4a,+movbe,+xsave,+xsaveopt, \
 +rdrand,+rdseed,+sha-ni,+invtsc,+topoext   # STABLE CPU FOR PROXMOX
             -smp "$CPUS"
             -m "$MEMORY"
@@ -405,12 +404,10 @@ start_vm() {
             -device "virtio-balloon-pci"
             -no-hpet
             -global "kvm-pit.lost_tick_policy=discard"
-            -drive file=disk.img,if=virtio,cache=writeback \
-           -device virtio-net-pci,netdev=net0 \
            -vga virtio \
            -device intel-hda -device hda-duplex \
            -usb -device usb-kbd -device usb-mouse \
-           -drive file=disk.img,if=virtio,cache=writeback,aio=native
+           
       ) 
         # Add port forwards if specified
         if [[ -n "$PORT_FORWARDS" ]]; then
