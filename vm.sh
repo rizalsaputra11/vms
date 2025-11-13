@@ -393,14 +393,12 @@ start_vm() {
         local qemu_cmd=(
             qemu-system-x86_64
             -machine type=q35,accel=tcg
-            -cpu EPYC,+avx2,+avx,+aes,+sse4.2,+sse4a,+movbe,+xsave,+xsaveopt, \
-+rdrand,+rdseed,+sha-ni,+invtsc,+topoext   # STABLE CPU FOR PROXMOX
+            -cpu EPYC
             -smp "$CPUS"
             -m "$MEMORY"
             -drive "file=$IMG_FILE,format=qcow2,if=virtio,cache=writeback"
             -drive "file=$SEED_FILE,format=raw,if=virtio"
             -netdev "user,id=net0,hostfwd=tcp::$SSH_PORT-:22"
-            -device "virtio-net-pci,netdev=net0"
             -device "virtio-balloon-pci"
             -no-hpet
             -global "kvm-pit.lost_tick_policy=discard"
